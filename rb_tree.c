@@ -813,6 +813,17 @@ int rbTree_IsErrorOccurred(rbTreeManager_t* rbTreeManager) {
 
 
 
+/******************************************************************************************************
+*		API区域说明：
+*				测试专用API
+*
+*
+*
+*
+*
+*
+*
+*******************************************************************************************************/
 
 void func(rbTreeNode_t* root, rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle) {
 	if (root == NULL)	return;
