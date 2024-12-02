@@ -10,10 +10,10 @@
 *	@brief 配置红黑树的删除策略
 */
 #define TIME_PRIORITY_DELETE_TACTICS		0							//时间优先，将使用递归方案，过深的树可能导致栈溢出
-#define	BALANCE_DELETE_TACTICS				1							//均衡策略，使用堆区迭代方案，速度较块，内存溢出的可能性较小。
+#define	BALANCE_DELETE_TACTICS				1							//均衡策略，使用堆区模拟栈方案，速度较块，内存溢出的可能性较小。
 #define MEM_PRIORITY_DELETE_TACTICS			2							//内存优先，删除过程中将不会使用几乎任何额外内存开销，但是过深的树可能导致耗时较长
 //配置接口
-#define DELETE_TACTICS_CONFIG			TIME_PRIORITY_DELETE_TACTICS	//红黑树删除策略配置接口，默认使用时间优先	
+#define DELETE_TACTICS_CONFIG			BALANCE_DELETE_TACTICS			//红黑树删除策略配置接口，默认使用时间优先	
 
 /**
 *	@brief		红黑树管理器

@@ -13,6 +13,7 @@
 *
 *           描述：一个红黑树模板库。
 * 
+*			版本修改说明：优化了内存布局，提高了CPU缓存命中率，提高了红黑树查询速度。
 *
 *******************************************************************************************************/
 
@@ -646,17 +647,17 @@ void rbTreePrivate_FreeTreeByIteration(rbTreeManager_t* rbTreeManager, rbTreeNod
 	}
 
 	rbTree_DelStackNode_t* stack = RB_TREE_NULL_PTR;
-	push(&stack, root);
+	rbTreePrivate_DelStackPush(&stack, root);
 
 	while (stack != RB_TREE_NULL_PTR) {
-		rbTreeNode_t* currentNode = pop(&stack);
+		rbTreeNode_t* currentNode = rbTreePrivate_DelStackPop(&stack);
 
 		// 将子节点加入栈中
 		if (currentNode->right != RB_TREE_NULL_PTR) {
-			push(&stack, currentNode->right);
+			rbTreePrivate_DelStackPush(&stack, currentNode->right);
 		}
 		if (currentNode->left != RB_TREE_NULL_PTR) {
-			push(&stack, currentNode->left);
+			rbTreePrivate_DelStackPush(&stack, currentNode->left);
 		}
 
 		// 回收节点的资源
