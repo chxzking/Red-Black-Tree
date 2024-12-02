@@ -93,6 +93,7 @@ void rbTreePrivate_InsertAdjust(rbTreeNode_t** root, rbTreeNode_t* new_node);
 void rbTreePrivate_DelNoneChildNodeAndAdjust(rbTreeManager_t* rbTreeManager, rbTreeNode_t* del_node);
 void rbTreePrivate_DelRedNodeAndAdjust(rbTreeManager_t* rbTreeManager, rbTreeNode_t* del_node);
 void rbTreePrivate_DelBlackNodeAndAdjust(rbTreeManager_t* rbTreeManager, rbTreeNode_t* del_node);
+void rbTreePrivate_FreeTreeByRecursion(rbTreeManager_t* rbTreeManager, rbTreeNode_t* target);
 
 /******************************************************************************************************
 *		私有区域说明：
@@ -578,7 +579,26 @@ READJUST_FLAG:	//重复调整标志位
 		return;
 	}
 }
-
+/**
+*	@brief 通过递归的方式删除整棵红黑树
+*
+*	@param	rbTreeManager_t* rbTreeManager		红黑树管理器
+*	@param	rbTreeNode_t* target				被删除的节点
+*
+*	@retval		none
+*/
+void rbTreePrivate_FreeTreeByRecursion(rbTreeManager_t* rbTreeManager, rbTreeNode_t* target) {
+	if (target == RB_TREE_NULL_PTR) {
+		return;
+	}
+	//递归删除左子树
+	rbTreePrivate_FreeTreeByRecursion(rbTreeManager, target->left);
+	//递归删除右子树
+	rbTreePrivate_FreeTreeByRecursion(rbTreeManager, target->right);
+	//删除当前节点
+	rbTreePrivate_FreeNodeMem(rbTreeManager, target);
+	return;
+}
 
 
 
@@ -625,8 +645,29 @@ int rbTree_Create(rbTreeManager_t** rbTreeManager, unsigned int type_size, rbTre
 void rbTree_Free(rbTreeManager_t** rbTreeManager) {
 	if (rbTreeManager == RB_TREE_NULL_PTR)	return;
 
-	//逐个释放红黑树节点
-	*rbTreeManager = NULL;
+	//红黑树资源回收
+
+#if DELETE_TACTICS_CONFIG == TIME_PRIORITY_DELETE_TACTICS		//时间优先
+
+	rbTreePrivate_FreeTreeByRecursion((*rbTreeManager),(*rbTreeManager)->root);
+
+#elif DELETE_TACTICS_CONFIG == BALANCE_DELETE_TACTICS			//均衡
+
+
+
+#elif DELETE_TACTICS_CONFIG == MEM_PRIORITY_DELETE_TACTICS		//空间优先
+
+
+
+#endif
+	
+
+
+	//管理器资源回收
+	free((*rbTreeManager)->rbTree_buffer);
+	free(*rbTreeManager);
+	*rbTreeManager = RB_TREE_NULL_PTR;
+	return;
 }
 
 int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* resource) {
@@ -825,21 +866,9 @@ int rbTree_IsErrorOccurred(rbTreeManager_t* rbTreeManager) {
 *
 *******************************************************************************************************/
 
-void func(rbTreeNode_t* root, rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle) {
-	if (root == NULL)	return;
-
-	func(root->left, rbTree_MatchRuleHandle);
-	printf("%02d ", *((int*)root->resource));
-	func(root->right, rbTree_MatchRuleHandle);
-}
-void print(rbTreeManager_t* rbTreeManager) {
-	func(rbTreeManager->root, rbTreeManager->rbTree_MatchRuleHandle);
-}
-
-
 #include <stdbool.h>
 
-
+//中序遍历
 void func(rbTreeNode_t* root, rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle) {
 	if (root == NULL)	return;
 
@@ -847,28 +876,24 @@ void func(rbTreeNode_t* root, rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle)
 	printf("%02d ", *((int*)root->resource));
 	func(root->right, rbTree_MatchRuleHandle);
 }
+//中序遍历API
 void print(rbTreeManager_t* rbTreeManager) {
 	func(rbTreeManager->root, rbTreeManager->rbTree_MatchRuleHandle);
 }
-
-
 // 定义队列节点
 typedef struct QueueNode {
 	rbTreeNode_t* treeNode;
 	struct QueueNode* next;
 } QueueNode_t;
-
 // 定义队列
 typedef struct Queue {
 	QueueNode_t* front;
 	QueueNode_t* rear;
 } Queue_t;
-
 // 初始化队列
 void initQueue(Queue_t* q) {
 	q->front = q->rear = NULL;
 }
-
 // 入队
 void enqueue(Queue_t* q, rbTreeNode_t* node) {
 	QueueNode_t* newQueueNode = (QueueNode_t*)malloc(sizeof(QueueNode_t));
@@ -882,7 +907,6 @@ void enqueue(Queue_t* q, rbTreeNode_t* node) {
 	}
 	q->rear = newQueueNode;
 }
-
 // 出队
 rbTreeNode_t* dequeue(Queue_t* q) {
 	if (q->front == NULL) return NULL;
@@ -893,12 +917,10 @@ rbTreeNode_t* dequeue(Queue_t* q) {
 	free(temp);
 	return treeNode;
 }
-
 // 判断队列是否为空
 bool isQueueEmpty(Queue_t* q) {
 	return q->front == NULL;
 }
-
 // 层次遍历打印红黑树
 void printLevelOrder(rbTreeNode_t* root) {
 	if (!root) {
@@ -939,8 +961,7 @@ void printLevelOrder(rbTreeNode_t* root) {
 		printf("\n");
 	}
 }
-
-
+//层次遍历API
 void printL(rbTreeManager_t* rbTreeManager) {
 	printLevelOrder(rbTreeManager->root);
 }
