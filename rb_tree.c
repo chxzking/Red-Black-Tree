@@ -9,12 +9,16 @@
 /******************************************************************************************************
 *           作者：红笺画文
 *           时间：2024年11月30日
-*           版本：2.0
+*           版本：2.1
 *
-*           描述：一个红黑树模板库。我的设计理念是：使用尽可能少的内存与执行步骤，同时使用尽可能简洁的
-*                 代码。每个函数只实现一种功能，且应尽量减少与外部数据的接触（例如全局变量），以最大程
-*                 度避免多个实例之间的干扰。函数应该保持高度的封装性，防止用户直接干扰功能的实现。另外，
-*                 API应该尽量少暴露实现细节，用户不应关注到功能的具体实现。
+*           描述：一个红黑树模板库。
+* 
+*			版本修改说明：优化了内存布局，提高了CPU缓存命中率，提高了红黑树查询速度。
+*
+*			风格描述：我的设计理念是，使用尽可能少的内存与执行步骤，同时使用尽可能简洁的代码。每个函数只
+*				      实现一种功能，且应尽量减少与外部数据的接触（例如全局变量），以最大程度避免多个实例
+*                     之间的干扰。函数应该保持高度的封装性，防止用户直接干扰功能的实现。另外，API应该尽
+*                     量少暴露实现细节，用户不应关注到功能的具体实现。
 *
 *******************************************************************************************************/
 
@@ -36,14 +40,14 @@
 typedef enum RB_COLOR RB_COLOR;													//红黑树节点颜色
 typedef struct rbTreeNode_t rbTreeNode_t;										//红黑树节点定义
 
-#define		RB_TREE_NULL_PTR				((void*)0)							//空指针定义
+#define		RB_TREE_NULL_PTR				((void*)0)				            //空指针定义
 
-struct rbTreeManager_t{
+struct rbTreeManager_t {
 	rbTreeNode_t* root;										//根节点
 	unsigned int  index_typde_size;							//索引类型的数据长度
 	rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle;		//红黑树匹配规则句柄
 	rbTree_FreeRuleHandle_ptr rbTree_FreeRuleHandle;		//红黑树资源释放句柄
-
+	void* rbTree_buffer;									//红黑树内部的缓存区，它的大小等于一个索引数据的长度，用来作为节点交换的临时缓存区。
 #ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
 	int errorCode;						//保存最近一次出错的错误码
 #endif
@@ -79,10 +83,10 @@ struct rbTreeNode_t {
 //私有函数声明
 
 RB_COLOR rbTreePrivate_GetNodeColor(rbTreeNode_t* rbTreeNode);
-rbTreeNode_t* rbTreePrivate_CreateNewNode(rbTreeManager_t* rbTreeManager,const void* index, void* resource);
+rbTreeNode_t* rbTreePrivate_CreateNewNode(rbTreeManager_t* rbTreeManager, const void* index, void* resource);
 void rbTreePrivate_FreeNodeMem(rbTreeManager_t* rbTreeManager, rbTreeNode_t* rbTreeNode);
-rbTreeNode_t* rbTreePrivate_Search(rbTreeManager_t* rbTreeManager,const void* index);
-void  rbTreePrivate_ExchangeTwoNode(rbTreeNode_t* rbTreeNode1, rbTreeNode_t* rbTreeNode2);
+rbTreeNode_t* rbTreePrivate_Search(rbTreeManager_t* rbTreeManager, const void* index);
+void  rbTreePrivate_ExchangeTwoNode(rbTreeManager_t* rbTreeManager,rbTreeNode_t* rbTreeNode1, rbTreeNode_t* rbTreeNode2);
 void rbTreePrivate_LeftRotate(rbTreeNode_t** root, rbTreeNode_t* target_node);
 void rbTreePrivate_RightRotate(rbTreeNode_t** root, rbTreeNode_t* target_node);
 void rbTreePrivate_InsertAdjust(rbTreeNode_t** root, rbTreeNode_t* new_node);
@@ -104,9 +108,9 @@ void rbTreePrivate_DelBlackNodeAndAdjust(rbTreeManager_t* rbTreeManager, rbTreeN
 
 /*
 * @brief	获取指定节点的颜色
-* 
+*
 * @param	rbTreeNode_t* rbTreeNode	红黑树节点地址
-* 
+*
 * @retval	返回节点颜色
 */
 RB_COLOR rbTreePrivate_GetNodeColor(rbTreeNode_t* rbTreeNode) {
@@ -114,29 +118,31 @@ RB_COLOR rbTreePrivate_GetNodeColor(rbTreeNode_t* rbTreeNode) {
 }
 /**
 *	@brief 创建一个红黑树节点
-* 
+*
 *	@param	rbTreeManager_t* rbTreeManager	红黑树管理器
 *	@param	void* index		为该节点添加索引
 *	@param	void* resource	为该节点添加资源
-* 
+*
 *	@retval	创建成功返回 节点地址
 *	@retval	创建失败返回 空
 */
-rbTreeNode_t* rbTreePrivate_CreateNewNode(rbTreeManager_t* rbTreeManager,const void* index,void* resource) {
+rbTreeNode_t* rbTreePrivate_CreateNewNode(rbTreeManager_t* rbTreeManager, const void* index, void* resource) {
 	//创建红黑树节点
-	rbTreeNode_t* node = (rbTreeNode_t*)malloc(sizeof(rbTreeNode_t));
+	/*
+	* 为了提高CPU缓存命中率，申请一整块连续的内存，并在逻辑上分为两段：
+	*	1、第一段为数据段，用于存储节点信息
+	*	2、第二段为索引段，用于保存索引信息
+	* 
+	*/
+	rbTreeNode_t* node = (rbTreeNode_t*)malloc(sizeof(rbTreeNode_t) + rbTreeManager->index_typde_size);
 	if (node == RB_TREE_NULL_PTR) {
 		rbTreeManager->errorCode = -RBTREE_ERRNO_OUT_OF_MEM;
 		return node;
 	}
 
-	//创建索引空间
-	node->index = (void*)malloc(rbTreeManager->index_typde_size);
-	if (node->index == RB_TREE_NULL_PTR) {
-		free(node);
-		rbTreeManager->errorCode = -RBTREE_ERRNO_OUT_OF_MEM;
-		return RB_TREE_NULL_PTR;
-	}
+
+	//格式化内存块
+	node->index = (void*)((char*)node + sizeof(rbTreeNode_t));
 
 	//初始化节点值
 	memcpy(node->index, index, rbTreeManager->index_typde_size);
@@ -157,7 +163,7 @@ rbTreeNode_t* rbTreePrivate_CreateNewNode(rbTreeManager_t* rbTreeManager,const v
 *
 *	@retval	none
 */
-void rbTreePrivate_FreeNodeMem(rbTreeManager_t* rbTreeManager,rbTreeNode_t* rbTreeNode) {
+void rbTreePrivate_FreeNodeMem(rbTreeManager_t* rbTreeManager, rbTreeNode_t* rbTreeNode) {
 	//释放节点资源
 	if (rbTreeManager->rbTree_FreeRuleHandle != RB_TREE_NULL_PTR) {
 		rbTreeManager->rbTree_FreeRuleHandle(rbTreeNode->resource);
@@ -175,7 +181,7 @@ void rbTreePrivate_FreeNodeMem(rbTreeManager_t* rbTreeManager,rbTreeNode_t* rbTr
 *	@retval		成功返回 节点地址
 *	@retval		失败返回 空
 */
-rbTreeNode_t* rbTreePrivate_Search(rbTreeManager_t* rbTreeManager,const void* index) {
+rbTreeNode_t* rbTreePrivate_Search(rbTreeManager_t* rbTreeManager, const void* index) {
 	rbTreeNode_t* probe = rbTreeManager->root;
 	int match_ret;
 	//遍历红黑树
@@ -200,22 +206,23 @@ rbTreeNode_t* rbTreePrivate_Search(rbTreeManager_t* rbTreeManager,const void* in
 /**
 *	@brief 交换两个节点，注意：如果两个节点有任意一个节点为空，那么便不会发生交换
 *
+*	@param	rbTreeManager_t* rbTreeManager	红黑树管理器
 *	@param	rbTreeNode_t* rbTreeNode1	节点1
 *	@param	rbTreeNode_t* rbTreeNode2	节点2
 *
 *	@retval		none
 */
-void  rbTreePrivate_ExchangeTwoNode(rbTreeNode_t* rbTreeNode1, rbTreeNode_t* rbTreeNode2) {
+void  rbTreePrivate_ExchangeTwoNode(rbTreeManager_t* rbTreeManager,rbTreeNode_t* rbTreeNode1, rbTreeNode_t* rbTreeNode2) {
 	if (rbTreeNode1 == RB_TREE_NULL_PTR || rbTreeNode2 == RB_TREE_NULL_PTR)	return;
 
-	void* temp = RB_TREE_NULL_PTR;
 	
 	//交换两个节点的索引
-	temp = rbTreeNode1->index;
-	rbTreeNode1->index = rbTreeNode2->index;
-	rbTreeNode2->index = temp;
-	
+	memcpy(rbTreeManager->rbTree_buffer, rbTreeNode1->index, rbTreeManager->index_typde_size);
+	memcpy(rbTreeNode1->index, rbTreeNode2->index, rbTreeManager->index_typde_size);
+	memcpy(rbTreeNode2->index, rbTreeManager->rbTree_buffer, rbTreeManager->index_typde_size);
+
 	//交换两个节点的资源
+	void* temp = RB_TREE_NULL_PTR;
 	temp = rbTreeNode1->resource;
 	rbTreeNode1->resource = rbTreeNode2->resource;
 	rbTreeNode2->resource = temp;
@@ -237,7 +244,7 @@ void  rbTreePrivate_ExchangeTwoNode(rbTreeNode_t* rbTreeNode1, rbTreeNode_t* rbT
 void rbTreePrivate_LeftRotate(rbTreeNode_t** root, rbTreeNode_t* target_node) {
 	rbTreeNode_t* new_node = target_node->right;
 	target_node->right = new_node->left;
-	
+
 	//
 	if (new_node->left != RB_TREE_NULL_PTR) {
 		new_node->left->parent = target_node;
@@ -398,7 +405,7 @@ void rbTreePrivate_DelNoneChildNodeAndAdjust(rbTreeManager_t* rbTreeManager, rbT
 	}
 	//被删除的节点是红色
 	else {
-		rbTreePrivate_DelRedNodeAndAdjust(rbTreeManager,del_node);
+		rbTreePrivate_DelRedNodeAndAdjust(rbTreeManager, del_node);
 	}
 	return;
 }
@@ -438,7 +445,7 @@ void rbTreePrivate_DelBlackNodeAndAdjust(rbTreeManager_t* rbTreeManager, rbTreeN
 	*/
 
 	/*	对于首次传入的target：
-	* 
+	*
 	*	1、target一定不可能为NULL
 	*	2、target一定不可能是根节点，根节点已经被过滤
 	*/
@@ -462,7 +469,7 @@ READJUST_FLAG:	//重复调整标志位
 
 	//树的调整
 	//处理情况1：被删除节点的叔叔节点是红色的
-	if (uncle->color == RB_RED) {								
+	if (uncle->color == RB_RED) {
 		//预处理，将节点颜色进行更新
 		uncle->parent->color = RB_RED;
 		uncle->color = RB_BLACK;
@@ -487,9 +494,9 @@ READJUST_FLAG:	//重复调整标志位
 	//处理情况2：被删除节点的叔叔节点是黑色的
 	else {
 		/*	分类讨论：叔叔节点是否存在子节点
-		* 
+		*
 		*	1、存在子节点，且子节点是红色，那么存在多余的节点可以转变为黑色节点传递到被删除的子树上。
-		*		
+		*
 		*	2、不存在子节点
 		*		2.1、父亲节点是红色
 		*		2.2、父亲节点是黑色
@@ -591,12 +598,19 @@ READJUST_FLAG:	//重复调整标志位
 int rbTree_Create(rbTreeManager_t** rbTreeManager, unsigned int type_size, rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle, rbTree_FreeRuleHandle_ptr rbTree_FreeRuleHandle) {
 	//参数合法性检查
 	if (rbTreeManager == RB_TREE_NULL_PTR || type_size == 0 || rbTree_MatchRuleHandle == RB_TREE_NULL_PTR)	return -RBTREE_ERRNO_ARG_ERR;
-	
+
 	//创建红黑树树管理器
 	*rbTreeManager = (rbTreeManager_t*)malloc(sizeof(rbTreeManager_t));
-	if(*rbTreeManager == RB_TREE_NULL_PTR){
+	if (*rbTreeManager == RB_TREE_NULL_PTR) {
 		return -RBTREE_ERRNO_OUT_OF_MEM;
 	}
+	//*rbTreeManager
+	(*rbTreeManager)->rbTree_buffer = malloc(sizeof(type_size));
+	if ((*rbTreeManager)->rbTree_buffer == RB_TREE_NULL_PTR) {
+		free(*rbTreeManager);
+		return -RBTREE_ERRNO_OUT_OF_MEM;
+	}
+
 	//初始化
 	(*rbTreeManager)->root = RB_TREE_NULL_PTR;
 	(*rbTreeManager)->index_typde_size = type_size;
@@ -610,7 +624,7 @@ int rbTree_Create(rbTreeManager_t** rbTreeManager, unsigned int type_size, rbTre
 
 void rbTree_Free(rbTreeManager_t** rbTreeManager) {
 	if (rbTreeManager == RB_TREE_NULL_PTR)	return;
-	
+
 	//逐个释放红黑树节点
 	*rbTreeManager = NULL;
 }
@@ -622,14 +636,14 @@ int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* reso
 		rbTreeManager->errorCode = -RBTREE_ERRNO_ARG_ERR;
 		return -RBTREE_ERRNO_ARG_ERR;
 	}
-	
+
 	//寻找合适的地方进行插入
 	rbTreeNode_t* slow = RB_TREE_NULL_PTR;
 	rbTreeNode_t* fast = rbTreeManager->root;
 	int match_ret;
 	while (fast != RB_TREE_NULL_PTR) {
 		slow = fast;
-		match_ret = rbTreeManager->rbTree_MatchRuleHandle(fast->index,index);//匹配含义：将输入的节点依次与树中的节点索引进行比较
+		match_ret = rbTreeManager->rbTree_MatchRuleHandle(fast->index, index);//匹配含义：将输入的节点依次与树中的节点索引进行比较
 		//匹配成功
 		if (match_ret == 0) {
 			rbTreeManager->errorCode = -RBTREE_ERRNO_DUP_VAL;
@@ -656,7 +670,7 @@ int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* reso
 	}
 	else {
 		match_ret = rbTreeManager->rbTree_MatchRuleHandle(slow->index, new_node->index);//匹配含义：将新添加的节点与父亲节点进行比较，判断自己为左孩子还是右孩子
-		if (match_ret > 0 ) {
+		if (match_ret > 0) {
 			slow->right = new_node;
 		}
 		else {
@@ -671,7 +685,7 @@ int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* reso
 
 void rbTree_DelNode(rbTreeManager_t* rbTreeManager, const void* index) {
 	//参数合法性检查
-	if (rbTreeManager == RB_TREE_NULL_PTR)	return ;
+	if (rbTreeManager == RB_TREE_NULL_PTR)	return;
 	if (index == RB_TREE_NULL_PTR) {
 		rbTreeManager->errorCode = -RBTREE_ERRNO_ARG_ERR;
 		return;
@@ -696,7 +710,7 @@ void rbTree_DelNode(rbTreeManager_t* rbTreeManager, const void* index) {
 			min_right_tree = min_right_tree->left;
 		}
 		//交换两个节点
-		rbTreePrivate_ExchangeTwoNode(target, min_right_tree);
+		rbTreePrivate_ExchangeTwoNode(rbTreeManager,target, min_right_tree);
 		target = min_right_tree;
 	}
 
@@ -709,18 +723,18 @@ void rbTree_DelNode(rbTreeManager_t* rbTreeManager, const void* index) {
 			rbTreeManager->root = target->left;
 		}
 		//被删除节点是父亲节点的左孩子
-		else if(target == target->parent->left){			
+		else if (target == target->parent->left) {
 			target->parent->left = target->left;
 		}
 		//被删除节点是父亲节点的右孩子
-		else if(target == target->parent->right){
+		else if (target == target->parent->right) {
 			target->parent->right = target->left;
 		}
 		rbTreePrivate_FreeNodeMem(rbTreeManager, target);//节点删除
 		return;
 	}
 	//只存在右孩子的情况，将孩子父亲节点相连接(度为1的情况)
-	else if(target->right){
+	else if (target->right) {
 		target->right->parent = target->parent;
 		target->right->color = RB_BLACK;
 		//父亲节点是根节点
@@ -758,14 +772,14 @@ void* rbTree_Search(rbTreeManager_t* rbTreeManager, const void* index) {
 	return probe ? probe->resource : RB_TREE_NULL_PTR;
 }
 
-void rbTree_ErrorCodePrint(rbTreeManager_t* rbTreeManager){
+void rbTree_ErrorCodePrint(rbTreeManager_t* rbTreeManager) {
 #ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
 	if (rbTreeManager == NULL) {
 		printf("rbTreeManager_t非法\n");
 		return;
 	}
 	//错误判断
-	switch (rbTreeManager->errorCode){
+	switch (rbTreeManager->errorCode) {
 	case NO_ERROR:
 		printf("没有发生错误\n");
 		break;
@@ -800,18 +814,17 @@ int rbTree_IsErrorOccurred(rbTreeManager_t* rbTreeManager) {
 
 
 
+void func(rbTreeNode_t* root, rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle) {
+	if (root == NULL)	return;
 
-/******************************************************************************************************
-*		API区域说明：
-*				测试函数
-*
-*
-*
-*
-*
-*
-*
-*******************************************************************************************************/
+	func(root->left, rbTree_MatchRuleHandle);
+	printf("%02d ", *((int*)root->resource));
+	func(root->right, rbTree_MatchRuleHandle);
+}
+void print(rbTreeManager_t* rbTreeManager) {
+	func(rbTreeManager->root, rbTreeManager->rbTree_MatchRuleHandle);
+}
+
 
 #include <stdbool.h>
 
@@ -920,4 +933,3 @@ void printLevelOrder(rbTreeNode_t* root) {
 void printL(rbTreeManager_t* rbTreeManager) {
 	printLevelOrder(rbTreeManager->root);
 }
-
