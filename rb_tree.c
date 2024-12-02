@@ -9,16 +9,10 @@
 /******************************************************************************************************
 *           作者：红笺画文
 *           时间：2024年11月30日
-*           版本：2.1
+*           版本：2.2
 *
 *           描述：一个红黑树模板库。
 * 
-*			版本修改说明：优化了内存布局，提高了CPU缓存命中率，提高了红黑树查询速度。
-*
-*			风格描述：我的设计理念是，使用尽可能少的内存与执行步骤，同时使用尽可能简洁的代码。每个函数只
-*				      实现一种功能，且应尽量减少与外部数据的接触（例如全局变量），以最大程度避免多个实例
-*                     之间的干扰。函数应该保持高度的封装性，防止用户直接干扰功能的实现。另外，API应该尽
-*                     量少暴露实现细节，用户不应关注到功能的具体实现。
 *
 *******************************************************************************************************/
 
@@ -78,7 +72,11 @@ struct rbTreeNode_t {
 #define	RBTREE_ERRNO_ARG_ERR			3	//参数错误
 #define RBTREE_ERRNO_NODE_INEXIT		4	//节点不存在
 
-
+//删除栈
+typedef struct rbTree_DelStackNode_t{ 
+	rbTreeNode_t* treeNode; 
+	struct rbTree_DelStackNode_t* next;
+}rbTree_DelStackNode_t;
 
 //私有函数声明
 
@@ -93,7 +91,10 @@ void rbTreePrivate_InsertAdjust(rbTreeNode_t** root, rbTreeNode_t* new_node);
 void rbTreePrivate_DelNoneChildNodeAndAdjust(rbTreeManager_t* rbTreeManager, rbTreeNode_t* del_node);
 void rbTreePrivate_DelRedNodeAndAdjust(rbTreeManager_t* rbTreeManager, rbTreeNode_t* del_node);
 void rbTreePrivate_DelBlackNodeAndAdjust(rbTreeManager_t* rbTreeManager, rbTreeNode_t* del_node);
-void rbTreePrivate_FreeTreeByRecursion(rbTreeManager_t* rbTreeManager, rbTreeNode_t* target);
+void rbTreePrivate_FreeTreeByRecursion(rbTreeManager_t* rbTreeManager, rbTreeNode_t* root);
+void rbTreePrivate_DelStackPush(rbTree_DelStackNode_t** stack, rbTreeNode_t* treeNode);
+rbTreeNode_t* rbTreePrivate_DelStackPop(rbTree_DelStackNode_t** stack);
+void rbTreePrivate_FreeTreeByIteration(rbTreeManager_t* rbTreeManager, rbTreeNode_t* root);
 
 /******************************************************************************************************
 *		私有区域说明：
@@ -583,22 +584,86 @@ READJUST_FLAG:	//重复调整标志位
 *	@brief 通过递归的方式删除整棵红黑树
 *
 *	@param	rbTreeManager_t* rbTreeManager		红黑树管理器
-*	@param	rbTreeNode_t* target				被删除的节点
+*	@param	rbTreeNode_t* root				被删除的节点
 *
 *	@retval		none
 */
-void rbTreePrivate_FreeTreeByRecursion(rbTreeManager_t* rbTreeManager, rbTreeNode_t* target) {
-	if (target == RB_TREE_NULL_PTR) {
+void rbTreePrivate_FreeTreeByRecursion(rbTreeManager_t* rbTreeManager, rbTreeNode_t* root) {
+	if (root == RB_TREE_NULL_PTR) {
 		return;
 	}
 	//递归删除左子树
-	rbTreePrivate_FreeTreeByRecursion(rbTreeManager, target->left);
+	rbTreePrivate_FreeTreeByRecursion(rbTreeManager, root->left);
 	//递归删除右子树
-	rbTreePrivate_FreeTreeByRecursion(rbTreeManager, target->right);
+	rbTreePrivate_FreeTreeByRecursion(rbTreeManager, root->right);
 	//删除当前节点
-	rbTreePrivate_FreeNodeMem(rbTreeManager, target);
+	rbTreePrivate_FreeNodeMem(rbTreeManager, root);
 	return;
 }
+/**
+*	@brief 删除栈-压栈操作
+*
+*	@param	rbTreeManager_t* rbTreeManager		栈顶
+*	@param	rbTreeNode_t* treeNode				栈节点
+*
+*	@retval		none
+*/
+void rbTreePrivate_DelStackPush(rbTree_DelStackNode_t** stack, rbTreeNode_t* treeNode) {
+	rbTree_DelStackNode_t* newStackNode = (rbTree_DelStackNode_t*)malloc(sizeof(rbTree_DelStackNode_t));
+	newStackNode->treeNode = treeNode;
+	newStackNode->next = *stack;
+	*stack = newStackNode;
+}
+/**
+*	@brief 删除栈-出栈操作
+*
+*	@param	rbTreeManager_t* rbTreeManager		栈顶
+*
+*	@retval	成功弹出红黑树节点		
+*	@retval 栈空则返回空
+*/
+rbTreeNode_t* rbTreePrivate_DelStackPop(rbTree_DelStackNode_t** stack) {
+	if (*stack == RB_TREE_NULL_PTR) {
+		return RB_TREE_NULL_PTR;
+	}
+	rbTree_DelStackNode_t* top = *stack;
+	rbTreeNode_t* treeNode = top->treeNode;
+	*stack = top->next;
+	free(top);
+	return treeNode;
+}
+/**
+*	@brief 通过堆区模拟栈的方式删除整棵红黑树
+*
+*	@param	rbTreeManager_t* rbTreeManager		红黑树管理器
+*	@param	rbTreeNode_t* root				被删除的节点
+*
+*	@retval		none
+*/
+void rbTreePrivate_FreeTreeByIteration(rbTreeManager_t* rbTreeManager, rbTreeNode_t* root) {
+	if (root == RB_TREE_NULL_PTR) {
+		return;
+	}
+
+	rbTree_DelStackNode_t* stack = RB_TREE_NULL_PTR;
+	push(&stack, root);
+
+	while (stack != RB_TREE_NULL_PTR) {
+		rbTreeNode_t* currentNode = pop(&stack);
+
+		// 将子节点加入栈中
+		if (currentNode->right != RB_TREE_NULL_PTR) {
+			push(&stack, currentNode->right);
+		}
+		if (currentNode->left != RB_TREE_NULL_PTR) {
+			push(&stack, currentNode->left);
+		}
+
+		// 回收节点的资源
+		rbTreePrivate_FreeNodeMem(rbTreeManager, root);
+	}
+}
+
 
 
 
@@ -653,7 +718,7 @@ void rbTree_Free(rbTreeManager_t** rbTreeManager) {
 
 #elif DELETE_TACTICS_CONFIG == BALANCE_DELETE_TACTICS			//均衡
 
-
+	rbTreePrivate_FreeTreeByIteration((*rbTreeManager), (*rbTreeManager)->root);
 
 #elif DELETE_TACTICS_CONFIG == MEM_PRIORITY_DELETE_TACTICS		//空间优先
 
