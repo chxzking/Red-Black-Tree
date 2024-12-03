@@ -12,8 +12,6 @@
 *           版本：2.2
 *
 *           描述：一个红黑树模板库。
-* 
-*			版本修改说明：优化了内存布局，提高了CPU缓存命中率，提高了红黑树查询速度。
 *
 *******************************************************************************************************/
 
@@ -96,6 +94,7 @@ void rbTreePrivate_FreeTreeByRecursion(rbTreeManager_t* rbTreeManager, rbTreeNod
 void rbTreePrivate_DelStackPush(rbTree_DelStackNode_t** stack, rbTreeNode_t* treeNode);
 rbTreeNode_t* rbTreePrivate_DelStackPop(rbTree_DelStackNode_t** stack);
 void rbTreePrivate_FreeTreeByIteration(rbTreeManager_t* rbTreeManager, rbTreeNode_t* root);
+void rbTreePrivate_FreeTreeByPeculiarity(rbTreeManager_t* rbTreeManager, rbTreeNode_t* root);
 
 /******************************************************************************************************
 *		私有区域说明：
@@ -664,7 +663,33 @@ void rbTreePrivate_FreeTreeByIteration(rbTreeManager_t* rbTreeManager, rbTreeNod
 		rbTreePrivate_FreeNodeMem(rbTreeManager, root);
 	}
 }
-
+/**
+*	@brief 通过树本身的特性的方式删除整棵红黑树
+*
+*	@param	rbTreeManager_t* rbTreeManager		红黑树管理器
+*	@param	rbTreeNode_t* root				被删除的节点
+*
+*	@retval		none
+*/
+void rbTreePrivate_FreeTreeByPeculiarity(rbTreeManager_t* rbTreeManager,rbTreeNode_t* root) {
+	rbTreeNode_t* temp = RB_TREE_NULL_PTR;
+	while (root != RB_TREE_NULL_PTR) {
+		if (root->left != RB_TREE_NULL_PTR) {
+			temp = root;
+			root = root->left;
+			temp->left = root->right;
+			root->right = temp;
+		}
+		else {
+			if (root == temp) {
+				temp = root->right;
+			}
+			// 回收节点的资源
+			rbTreePrivate_FreeNodeMem(rbTreeManager, root);
+			root = temp;
+		}
+	}
+}
 
 
 
@@ -723,7 +748,7 @@ void rbTree_Free(rbTreeManager_t** rbTreeManager) {
 
 #elif DELETE_TACTICS_CONFIG == MEM_PRIORITY_DELETE_TACTICS		//空间优先
 
-
+	rbTreePrivate_FreeTreeByPeculiarity((*rbTreeManager), (*rbTreeManager)->root);
 
 #endif
 	
@@ -740,7 +765,9 @@ int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* reso
 	//参数检查
 	if (rbTreeManager == RB_TREE_NULL_PTR)	return -RBTREE_ERRNO_ARG_ERR;
 	if (index == RB_TREE_NULL_PTR) {
+#ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
 		rbTreeManager->errorCode = -RBTREE_ERRNO_ARG_ERR;
+#endif	
 		return -RBTREE_ERRNO_ARG_ERR;
 	}
 
@@ -753,7 +780,10 @@ int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* reso
 		match_ret = rbTreeManager->rbTree_MatchRuleHandle(fast->index, index);//匹配含义：将输入的节点依次与树中的节点索引进行比较
 		//匹配成功
 		if (match_ret == 0) {
+			
+#ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
 			rbTreeManager->errorCode = -RBTREE_ERRNO_DUP_VAL;
+#endif
 			return -RBTREE_ERRNO_DUP_VAL;
 		}
 		//请求向左子树遍历
@@ -794,14 +824,18 @@ void rbTree_DelNode(rbTreeManager_t* rbTreeManager, const void* index) {
 	//参数合法性检查
 	if (rbTreeManager == RB_TREE_NULL_PTR)	return;
 	if (index == RB_TREE_NULL_PTR) {
+#ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
 		rbTreeManager->errorCode = -RBTREE_ERRNO_ARG_ERR;
+#endif
 		return;
 	}
 
 	//查找目标索引
 	rbTreeNode_t* target = rbTreePrivate_Search(rbTreeManager, index);
 	if (target == RB_TREE_NULL_PTR) {
+#ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
 		rbTreeManager->errorCode = -RBTREE_ERRNO_NODE_INEXIT;
+#endif
 		return;
 	}
 
@@ -870,7 +904,9 @@ void* rbTree_Search(rbTreeManager_t* rbTreeManager, const void* index) {
 	//参数检查
 	if (rbTreeManager == RB_TREE_NULL_PTR)	return RB_TREE_NULL_PTR;
 	if (index == RB_TREE_NULL_PTR) {
-		rbTreeManager->errorCode = -RBTREE_ERRNO_ARG_ERR;
+#ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
+	rbTreeManager->errorCode = -RBTREE_ERRNO_ARG_ERR;
+#endif
 		return RB_TREE_NULL_PTR;
 	}
 	//树的遍历
