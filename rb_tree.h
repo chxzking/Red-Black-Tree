@@ -13,7 +13,7 @@
 #define	BALANCE_DELETE_TACTICS				1							//均衡策略，使用堆区模拟栈方案，速度较块，内存溢出的可能性较小。
 #define MEM_PRIORITY_DELETE_TACTICS			2							//内存优先，删除过程中将不会使用几乎任何额外内存开销，但是过深的树可能导致耗时较长
 //配置接口
-#define DELETE_TACTICS_CONFIG			BALANCE_DELETE_TACTICS			//红黑树删除策略配置接口，默认使用时间优先	
+#define DELETE_TACTICS_CONFIG			BALANCE_DELETE_TACTICS			//红黑树删除策略配置接口，默认使用均衡策略	
 
 /**
 *	@brief		红黑树管理器
