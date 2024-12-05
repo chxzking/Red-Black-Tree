@@ -9,7 +9,7 @@
 /******************************************************************************************************
 *           作者：红笺画文
 *           时间：2024年11月30日
-*           版本：2.2
+*           版本：2.4.4
 *
 *           描述：一个红黑树模板库。
 *
@@ -660,7 +660,7 @@ void rbTreePrivate_FreeTreeByIteration(rbTreeManager_t* rbTreeManager, rbTreeNod
 		}
 
 		// 回收节点的资源
-		rbTreePrivate_FreeNodeMem(rbTreeManager, root);
+		rbTreePrivate_FreeNodeMem(rbTreeManager, currentNode);
 	}
 }
 /**
@@ -954,7 +954,55 @@ int rbTree_IsErrorOccurred(rbTreeManager_t* rbTreeManager) {
 	return NO_ERROR;
 }
 
+void* rbTree_Search_GetMinNode(rbTreeManager_t* rbTreeManager) {
+	if (rbTreeManager == RB_TREE_NULL_PTR)	return RB_TREE_NULL_PTR;
 
+	rbTreeNode_t* temp = rbTreeManager->root;
+
+	if (temp == RB_TREE_NULL_PTR) {
+#ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
+		rbTreeManager->errorCode = -RBTREE_ERRNO_NODE_INEXIT;
+#endif
+		return NULL;
+	}
+
+	while (temp->left != RB_TREE_NULL_PTR) {
+		temp = temp->left;
+	}
+	return temp->resource;
+}
+
+void* rbTree_Search_GetMaxNode(rbTreeManager_t* rbTreeManager) {
+	if (rbTreeManager == RB_TREE_NULL_PTR)	return RB_TREE_NULL_PTR;
+
+	rbTreeNode_t* temp = rbTreeManager->root;
+
+	if (temp == RB_TREE_NULL_PTR) {
+#ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
+		rbTreeManager->errorCode = -RBTREE_ERRNO_NODE_INEXIT;
+#endif
+		return NULL;
+	}
+
+	while (temp->right != RB_TREE_NULL_PTR) {
+		temp = temp->right;
+	}
+	return temp->resource;
+}
+
+void* rbTree_Search_GetRootNode(rbTreeManager_t* rbTreeManager) {
+	if (rbTreeManager == RB_TREE_NULL_PTR)	return RB_TREE_NULL_PTR;
+
+	rbTreeNode_t* temp = rbTreeManager->root;
+
+#ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
+	if (temp == RB_TREE_NULL_PTR) {
+		rbTreeManager->errorCode = -RBTREE_ERRNO_NODE_INEXIT;
+		return NULL;
+	}
+#endif
+	return temp->resource;
+}
 
 /******************************************************************************************************
 *		API区域说明：

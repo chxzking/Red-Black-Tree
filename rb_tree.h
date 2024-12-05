@@ -125,7 +125,39 @@ void rbTree_DelNode(rbTreeManager_t* rbTreeManager, const void* index);
 *		@retval 查找失败返回NULL 并且树中加更新错误码，您可以使用 rbTree_ErrorCodePrint API打印错误语句
 */
 void* rbTree_Search(rbTreeManager_t* rbTreeManager, const void* index);
-
+/**
+*	@brief	在指定红黑树中进行查找最左节点（匹配最小）的值
+*
+*	@param
+*		@param	rbTreeManager_t* rbTreeManager	 红黑树管理器，它是用于管理一棵红黑树，同时它也是区分红黑树的唯一特征值
+*
+*	@retval
+*		@retval	查找成功则返回您在树中保存的最左节点的资源
+*		@retval 查找失败返回NULL 并且树中加更新错误码，您可以使用 rbTree_ErrorCodePrint API打印错误语句
+*/
+void* rbTree_Search_GetMinNode(rbTreeManager_t* rbTreeManager);
+/**
+*	@brief	在指定红黑树中进行查找最右节点（匹配最大）的值
+*
+*	@param
+*		@param	rbTreeManager_t* rbTreeManager	 红黑树管理器，它是用于管理一棵红黑树，同时它也是区分红黑树的唯一特征值
+*
+*	@retval
+*		@retval	查找成功则返回您在树中保存的最大节点的资源
+*		@retval 查找失败返回NULL 并且树中加更新错误码，您可以使用 rbTree_ErrorCodePrint API打印错误语句
+*/
+void* rbTree_Search_GetMaxNode(rbTreeManager_t* rbTreeManager);
+/**
+*	@brief	在指定红黑树中获取根节点的值
+*
+*	@param
+*		@param	rbTreeManager_t* rbTreeManager	 红黑树管理器，它是用于管理一棵红黑树，同时它也是区分红黑树的唯一特征值
+*
+*	@retval
+*		@retval	查找成功则返回您在树中保存的根节点的资源
+*		@retval 查找失败返回NULL 并且树中加更新错误码，您可以使用 rbTree_ErrorCodePrint API打印错误语句
+*/
+void* rbTree_Search_GetRootNode(rbTreeManager_t* rbTreeManager);
 /************************************************************************************************
 *	红黑树错误查询
 ************************************************************************************************/
