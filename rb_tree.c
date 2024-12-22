@@ -9,12 +9,11 @@
 /******************************************************************************************************
 *           作者：红笺画文
 *           时间：2024年11月30日
-*           版本：2.4.4
+*           版本：2.4
 *
 *           描述：一个红黑树模板库。
 *
 *******************************************************************************************************/
-
 
 
 
@@ -762,6 +761,10 @@ void rbTree_Free(rbTreeManager_t** rbTreeManager) {
 }
 
 int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* resource) {
+	return rbTree_AddNodeOrFetch(rbTreeManager, index, resource, RB_TREE_NULL_PTR);
+}
+
+int rbTree_AddNodeOrFetch(rbTreeManager_t* rbTreeManager, const void* index, void* resource, void** exist_resource) {
 	//参数检查
 	if (rbTreeManager == RB_TREE_NULL_PTR)	return -RBTREE_ERRNO_ARG_ERR;
 	if (index == RB_TREE_NULL_PTR) {
@@ -770,6 +773,7 @@ int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* reso
 #endif	
 		return -RBTREE_ERRNO_ARG_ERR;
 	}
+	
 
 	//寻找合适的地方进行插入
 	rbTreeNode_t* slow = RB_TREE_NULL_PTR;
@@ -780,11 +784,19 @@ int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* reso
 		match_ret = rbTreeManager->rbTree_MatchRuleHandle(fast->index, index);//匹配含义：将输入的节点依次与树中的节点索引进行比较
 		//匹配成功
 		if (match_ret == 0) {
-			
+			//如果是资源提取模式
+			if (exist_resource != RB_TREE_NULL_PTR) {
+				//返回资源			
+				*exist_resource = fast->resource;
+				return RBTREE_ERRNO_DUP_VAL;//返回正数2
+			}
+			//如果是普通查找模式
+			else {
 #ifdef ENABLE_RBTREE_ERROR_CODE_PRINT
-			rbTreeManager->errorCode = -RBTREE_ERRNO_DUP_VAL;
+				rbTreeManager->errorCode = -RBTREE_ERRNO_DUP_VAL;
 #endif
-			return -RBTREE_ERRNO_DUP_VAL;
+				return -RBTREE_ERRNO_DUP_VAL;
+			}
 		}
 		//请求向左子树遍历
 		else if (match_ret < 0) {

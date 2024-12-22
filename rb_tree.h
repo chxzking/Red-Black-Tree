@@ -22,11 +22,11 @@ typedef struct rbTreeManager_t	rbTreeManager_t;
 //查找规则
 /**
 *	@brief	红黑树节点匹配规则句柄。您应当传入该函数指针,红黑树将使用此规则对节点进行匹配，该规则将被使用在查找匹配、节点插入方向确定等操作中。
-*	
+*
 *	@param
 *		@param	const void* reference_node		//参考对象
 *		@param  const void* rbTree_node			//红黑树节点对象，此对象将会从节点中提取，用于和 reference_node 进行比较
-*	
+*
 *	@retval
 *		@retval		如果匹配成功，则返回 [0]
 *		@retval		如果匹配失败，需要向红黑树的[左]子树继续匹配则返回负数，如[-1]
@@ -37,7 +37,7 @@ typedef int (*rbTree_MatchRuleHandle_ptr)(const void* reference_node, const void
 *	@brief	红黑树资源释放处理句柄。当红黑树节点被释放时会调用该句柄。如果您保存的资源需要手动释放（如动态内存），请自定义该函数
 *
 *	@param
-*		@param	void* resource		保存的规则
+*		@param	void* resource		红黑树节点中保存的资源
 *
 *	@retval
 *		none
@@ -51,19 +51,19 @@ typedef void (*rbTree_FreeRuleHandle_ptr)(void* resource);
 /**
 *	@brief	创建一棵红黑树。注意,同一棵树的所有节点的索引类型必须相同，您如果选定了类型后就应该在这棵树使用同类型索引，否则可能引发严重错误。
 *			其次,红黑树的资源类型建议相同，红黑树在进行节点删除操作时会调用自定义的清除规则对自定义资源进行回收，除非您能很好的解决不同类
-*			型的资源泄露问题，否则不建议在同一棵红黑树中使用不同类型的资源。	
-* 
+*			型的资源泄露问题，否则不建议在同一棵红黑树中使用不同类型的资源。
+*
 *	@param
 *		@param	rbTreeManager_t** rbTreeManager							红黑树管理器，它是用于管理一棵红黑树，同时它也是区分红黑树的唯一特征值
 *		@param	unsigned int type_size									自定义索引类型的占用的空间大小。
 *		@param  rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle		该回调函数时此红黑树用于节点与节点比较的规则，您应该自定义一个合理的匹配函数，并且您不能传入 NULL
 *		@param  rbTree_FreeRuleHandle_ptr rbTree_FreeRuleHandle			该回调函数会在出现节点删除的情况下使用，它用于您在释放节点保存的自定义资源，如果您的资源不需要手动释放，那么可以填写为 NULL
-* 
+*
 *	@retval
 *		@retval		创建成功返回 [0]
 *		@retval		创建失败返回负值错误码，您可以使用 rbTree_ErrorCodePrint API打印错误语句
 */
-int rbTree_Create(rbTreeManager_t** rbTreeManager,unsigned int type_size, rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle, rbTree_FreeRuleHandle_ptr rbTree_FreeRuleHandle);
+int rbTree_Create(rbTreeManager_t** rbTreeManager, unsigned int type_size, rbTree_MatchRuleHandle_ptr rbTree_MatchRuleHandle, rbTree_FreeRuleHandle_ptr rbTree_FreeRuleHandle);
 /**
 *	@brief	释放整棵红黑树
 *
@@ -85,23 +85,37 @@ void rbTree_Free(rbTreeManager_t** rbTreeManager);
 *		@param	rbTreeManager_t* rbTreeManager	 红黑树管理器，它是用于管理一棵红黑树，同时它也是区分红黑树的唯一特征值
 *		@param  const void* index				 为新节点添加一个索引，红黑树内部会保存该索引的副本，所以您可以使用局部变量
 *		@param  void* resource					 新节点保存的资源，注意，红黑树内部不会保存该资源的副本，它会直接使用您传入的资源地址。
-* 
+*
 *	@retval
 *		@retval	添加成功则返回[0]
 *		@retval 添加失败返回负值错误码，您可以使用 rbTree_ErrorCodePrint API打印错误语句
 */
 int rbTree_AddNode(rbTreeManager_t* rbTreeManager, const void* index, void* resource);
-
+/**
+*	@brief	给指定红黑树添加一个节点,如果该节点对应的索引已经在红黑树中存在了一个节点，那么返回这个节点的资源。
+*
+*	@param
+*		@param	rbTreeManager_t* rbTreeManager	 红黑树管理器，它是用于管理一棵红黑树，同时它也是区分红黑树的唯一特征值
+*		@param  const void* index				 为新节点添加一个索引，红黑树内部会保存该索引的副本，所以您可以使用局部变量
+*		@param  void* resource					 新节点保存的资源，注意，红黑树内部不会保存该资源的副本，它会直接使用您传入的资源地址。
+*		@param  void** exist_resource			 已经存在的节点资源。如果传入的参数为空，则会导致该函数完全退化为 [rbTree_AddNode]，包括返回值与错误处理 。
+*			
+*	@retval
+*		@retval	添加成功则返回[0]
+*		@retval 如果出现了重复的节点会返回[2],注意此函数不会触发重复添加错误。
+*		@retval 添加失败返回负值错误码，您可以使用 rbTree_ErrorCodePrint API打印错误语句
+*/
+int rbTree_AddNodeOrFetch(rbTreeManager_t* rbTreeManager, const void* index, void* resource,void** exist_resource);
 /************************************************************************************************
 *	红黑树节点删除
 ************************************************************************************************/
 
 /**
-*	@brief	给指定红黑树添加一个节点
+*	@brief	删除指定红黑树指定的一个节点
 *
 *	@param
 *		@param	rbTreeManager_t* rbTreeManager	 红黑树管理器，它是用于管理一棵红黑树，同时它也是区分红黑树的唯一特征值
-*		@param  const void* index				 为新节点添加一个索引，红黑树内部会保存该索引的副本，所以您可以使用局部变量
+*		@param  const void* index				 被删除的红黑树节点的索引
 *
 *	@retval
 *		@retval	none
@@ -167,9 +181,9 @@ void* rbTree_Search_GetRootNode(rbTreeManager_t* rbTreeManager);
 *
 *	@param
 *		@param	rbTreeManager_t* rbTreeManager		红黑树管理器
-*	
+*
 *	@retval
-*		none	
+*		none
 */
 void rbTree_ErrorCodePrint(rbTreeManager_t* rbTreeManager);
 /**
